@@ -13,11 +13,21 @@ jobs:
         env:
           KEY: ${{ secrets.METALPRICEAPI_KEY }}
         run: |
-          mkdir -p docs/metal-rates
+         mkdir -p docs
           curl -fsS --retry 3 \
             "https://api.metalpriceapi.com/v1/latest?api_key=$KEY&base=EUR&currencies=XAU,XAG,XPT,XPD" \
-            -o /tmp/rates.json
-          jq -e '.success == true and (.rates.XAU | type == "number")' /tmp/rates.json
+            -o /tmp/raw.json
+
+          jq -e '.success == true' /tmp/raw.json > /dev/null
+
+          # MetalpriceAPI returns ounces-per-EUR. Invert to EUR-per-ounce.
+          jq '{success, timestamp, date, base,
+               rates: (.rates | map_values(if . > 0 then 1/. else null end))}' \
+            /tmp/raw.json > /tmp/rates.json
+
+          # Sane EUR/oz range. Catches a future change in either direction.
+          jq -e '.rates.XAU > 1000 and .rates.XAU < 15000' /tmp/rates.json > /dev/null
+
           cp /tmp/rates.json docs/rates.json
       - name: Commit
         run: |
