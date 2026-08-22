@@ -1,0 +1,28 @@
+name: metal-rates
+on:
+  schedule: [{ cron: '0 7 * * *' }]
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch rates
+        env:
+          KEY: ${{ secrets.METALPRICEAPI_KEY }}
+        run: |
+          mkdir -p docs/metal-rates
+          curl -fsS --retry 3 \
+            "https://api.metalpriceapi.com/v1/latest?api_key=$KEY&base=EUR&currencies=XAU,XAG,XPT,XPD" \
+            -o /tmp/rates.json
+          jq -e '.success == true and (.rates.XAU | type == "number")' /tmp/rates.json
+          cp /tmp/rates.json docs/metal-rates/rates.json
+      - name: Commit
+        run: |
+          git config user.name  github-actions
+          git config user.email github-actions@github.com
+          git add docs/metal-rates/rates.json
+          git diff --staged --quiet || git commit -m "rates $(date -u +%F)"
+          git push
